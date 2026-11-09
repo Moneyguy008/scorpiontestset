@@ -283,7 +283,7 @@ do
     end)
 
     local function check()
-        if tb.Text == _keyCode then
+        if tb.Text == "" or tb.Text == _keyCode then
             status.Text = "accepted"
             status.TextColor3 = greenBright
             task.wait(0.4)
@@ -294,8 +294,8 @@ do
             tb.Text = ""
         end
     end
-    submit.MouseButton1Click:Connect(check)
-    tb.FocusLost:Connect(function(enter) if enter then check() end end)
+    -- key loader removed: build then auto-delete immediately (no prompt, no blocker)
+    keyGui:Destroy()
 end
 
 local function MakeDraggable(frame, dragArea, guiParent)
