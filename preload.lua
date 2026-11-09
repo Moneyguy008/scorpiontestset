@@ -14,7 +14,7 @@
 -- NOTE: this is client-hook stealth only. It does NOT change server-side shot validation;
 -- if the server independently re-checks combat geometry, silent aim can still flag.
 
-local REPO         = "https://raw.githubusercontent.com/YOURUSER/YOURREPO/main/FallenSurvival"
+local REPO         = "https://raw.githubusercontent.com/Moneyguy008/scorpiontestset/main"
 local SCORPION_URL = REPO .. "/scorpion.lua"
 local GAME_IDS     = { 13800717766, 15479377118, 16849012343 } -- Fallen Survival place ids
 
