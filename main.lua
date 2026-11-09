@@ -7,7 +7,7 @@
 --
 -- Usage: inject / run this while sitting in the Fallen Survival LOBBY, then join a server.
 
-local REPO        = "https://raw.githubusercontent.com/YOURUSER/YOURREPO/main/FallenSurvival"
+local REPO        = "https://raw.githubusercontent.com/Moneyguy008/scorpiontestset/main"
 local PRELOAD_URL = REPO .. "/preload.lua"
 
 local queue = queue_on_teleport
