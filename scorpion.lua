@@ -1,36 +1,30 @@
--- [amongus-style UD bridge] The real module-function swaps (what the anti-cheat
--- actually detects) are installed by preload.lua DURING the game's script-hold, i.e.
--- BEFORE AssetContainer captures its baselines. This file only writes handler closures
--- into __SCORP.hooks slots, which are plain table writes the AC does not watch.
--- If run WITHOUT the preload, the block below installs the trampolines now as a
--- non-UD fallback so the script still works standalone.
 do
-    local __S = getgenv().__SCORP
-    if not (__S and __S.real and __S.real.CreateProjectile) then
-        __S = __S or { real = {}, hooks = {} }
-        getgenv().__SCORP = __S
-        local RS = game:GetService("ReplicatedStorage")
-        local Mods = RS:WaitForChild("Modules", 10)
-        local function tramp(tbl, name)
-            if not tbl or type(tbl[name]) ~= "function" or __S.real[name] then return end
-            __S.real[name] = tbl[name]
-            tbl[name] = function(...)
-                local h = __S.hooks[name]
-                if h then return h(...) end
-                return __S.real[name](...)
-            end
+    local ALLOWED = {
+        ["isaeva"]    = true,
+        ["volcano"]   = true,
+        ["madium"]    = true,
+        ["potassium"] = true,
+        ["opiumware"] = true,
+    }
+
+    local execName = "unknown"
+    pcall(function()
+        if type(identifyexecutor) == "function" then
+            execName = identifyexecutor()
+        elseif type(getexecutorname) == "function" then
+            execName = getexecutorname()
         end
-        if Mods then
-            pcall(function() local m = require(Mods:WaitForChild("VFXModule", 10)); tramp(m, "CreateProjectile"); tramp(m, "CreateBlood"); tramp(m, "CreateHole") end)
-            pcall(function() local m = require(Mods:WaitForChild("ItemClass", 10)); tramp(m, "AttachmentStats") end)
-            pcall(function() local m = require(Mods:WaitForChild("RaycastUtil", 10)); tramp(m, "Raycast") end)
-        end
+    end)
+    execName = tostring(execName)
+    local key = string.lower(execName)
+
+    if not ALLOWED[key] then
         pcall(function()
-            if setreadonly then setreadonly(math, false) end
-            __S.real.abs = math.abs
-            math.abs = function(...) local h = __S.hooks.abs; if h then return h(...) end return __S.real.abs(...) end
-            if setreadonly then setreadonly(math, true) end
+            game:GetService("Players").LocalPlayer:Kick(
+                "scorpion.wtf | only works on Isaeva, Volcano, Madium, Potassium or Opiumware (detected: " .. execName .. ")"
+            )
         end)
+        while true do task.wait(9e9) end
     end
 end
 
@@ -88,7 +82,7 @@ end
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/i77lhm/Libraries/refs/heads/main/Utopia/Library.lua"))()
 
 local _keyValidated = false
-local _keyCode = "SCORPION-WTF-JJZ9V-BMSCZ-8H6JY-127U8"
+local _keyCode = "48KZE-PA3EA-MH663-NOG1P"
 local _discordUrl = "https://discord.gg/reQwaRfXyX"
 do
     local keyGui = CreateUndetectedGui("KeySystem")
@@ -281,9 +275,9 @@ do
             status.TextColor3 = white
         end
     end)
-
+    keyGui:Destroy()
     local function check()
-        if tb.Text == "" or tb.Text == _keyCode then
+        if tb.Text == "" then
             status.Text = "accepted"
             status.TextColor3 = greenBright
             task.wait(0.4)
@@ -294,8 +288,9 @@ do
             tb.Text = ""
         end
     end
-    -- key loader removed: build then auto-delete immediately (no prompt, no blocker)
+    submit.MouseButton1Click:Connect(check)
     keyGui:Destroy()
+    tb.FocusLost:Connect(function(enter) if enter then check() end end)
 end
 
 local function MakeDraggable(frame, dragArea, guiParent)
@@ -523,6 +518,9 @@ SETTINGS = {
     NoFallDamage=false, InstantLoot=false,
     PerfectFarm=false,
     ReloadBar=false, RangeMult=false, RangeAmount=5,
+    MiscESPShowImages=false,
+    MiscESPShowName=true,
+    MiscESPShowStuds=true,
     ManipTargetColor=Color3.fromRGB(255,0,0),
     StoneMaxDist=1000, MetalMaxDist=1000, PhosphateMaxDist=1000,
     PlayersBoundingType="Static",
@@ -538,6 +536,16 @@ SETTINGS = {
         ArmsChams=false, ArmsColor=Color3.fromRGB(255,255,255),
         ArmsMaterial="ForceField", ArmsTexture="None",
     },
+    ModDetector = {Enabled=false, Notify=true},
+    Crosshair = {
+        Enabled=false, Color=Color3.fromRGB(255,255,255),
+        Preset="Custom",
+        Position="Center", Sides=4,
+        Length=10, Width=2, Gap=6,
+        Transparency=0, Outline=true, OutlineColor=Color3.fromRGB(0,0,0),
+        Spin=false, SpinSpeed=1, Rotation=0,
+        TargetColor=Color3.fromRGB(255,80,80),
+    },
     SilentAim = {
         Enabled=false, HitChance=100,
         Manipulation=false, ManipulationKey=false, ManipulationDistance=10,
@@ -550,6 +558,9 @@ SETTINGS = {
         FovFillTransparency=0.8, FovRainbow=false, FovRainbowSpeed=1,
         FovGradientRotation=0, FovRotate=false, FovRotateSpeed=1.2,
     },
+    MeleeSpeed = {Enabled=false, Amount=1.3},
+    MeleeRange = {Enabled=false, Amount=2.5},
+    InstantEquip = {Enabled=false},
 }
 
 local OriginalNoclipCollision = {}
@@ -676,6 +687,11 @@ GunSec:Slider({Name="Tracer Thickness", Flag="Tracer_Thickness",   Min=0, Defaul
 
 local ExploitSec = CombatTab:Section({Name="Exploits", Side=2})
 ExploitSec:Toggle({Name="Instant Eoka",      Flag="InstantEoka_Enabled",     Default=false, Callback=function(v) SETTINGS.InstantEoka=v end})
+ExploitSec:Toggle({Name="Instant Equip",     Flag="InstantEquip_Enabled",    Default=false, Callback=function(v) SETTINGS.InstantEquip.Enabled=v end})
+ExploitSec:Toggle({Name="Fast Melee",        Flag="MeleeSpeed_Enabled",      Default=false, Callback=function(v) SETTINGS.MeleeSpeed.Enabled=v end})
+ExploitSec:Slider({Name="Melee Speed",       Flag="MeleeSpeed_Amount",       Min=1, Default=13, Max=20, Suffix="%", Decimals=1, Callback=function(v) SETTINGS.MeleeSpeed.Amount=v/10 end})
+ExploitSec:Toggle({Name="Melee Range",       Flag="MeleeRange_Enabled",      Default=false, Callback=function(v) SETTINGS.MeleeRange.Enabled=v end})
+ExploitSec:Slider({Name="Melee Range Amount",Flag="MeleeRange_Amount",       Min=1, Default=20, Max=35, Suffix="%", Decimals=1, Callback=function(v) SETTINGS.MeleeRange.Amount=v/10 end})
 ExploitSec:Toggle({Name="No Fall Damage",    Flag="NoFallDamage_Enabled",    Default=false, Callback=function(v) SETTINGS.NoFallDamage=v end})
 ExploitSec:Toggle({Name="Instant Loot",      Flag="InstantLoot_Enabled",     Default=false,
     Callback=function(v)
@@ -809,12 +825,26 @@ AISec:Slider({Name="Max Distance", Flag="AIMaxDistance", Min=0, Default=100, Max
 
 local MiscESPSec = ESPTab:Section({Name="Misc ESP", Side=2})
 MiscESPSec:Toggle({Name="Enabled", Flag="MiscEnabledESP", Default=false})
+MiscESPSec:Toggle({Name="Show Item Image", Flag="MiscESPShowImages", Default=false, Callback=function(v) SETTINGS.MiscESPShowImages=v end})
+MiscESPSec:Toggle({Name="Show Name", Flag="MiscESPShowName", Default=true, Callback=function(v) SETTINGS.MiscESPShowName=v end})
+MiscESPSec:Toggle({Name="Show Studs", Flag="MiscESPShowStuds", Default=true, Callback=function(v) SETTINGS.MiscESPShowStuds=v end})
 local MiscItems = {"Stone","Metal","Phosphate","Wool","Animals","Care Package","Drops","Body Bag","Salvaged Flycopter","Auto Turret","Shotgun Turret"}
 for _, v in ipairs(MiscItems) do
     MiscESPSec:Toggle({Name=v, Flag=v.."Enabled"}):Colorpicker({Name=v.." Color", Flag=v.."Color", Default=Color3.fromRGB(235,255,240)})
     MiscESPSec:Slider({Name=v.." Dist", Flag=v.."MaxDistance", Min=0, Default=50, Max=100, Suffix="%", Decimals=1,
         Callback=function(val) SETTINGS[v.."MaxDist"]=val*30 end})
 end
+
+local MOD_IDS = {
+    [1478885961]=true, [5090141118]=true, [2364950171]=true, [7178750309]=true,
+    [1586207495]=true, [3122439095]=true, [4439737613]=true, [81993536]=true,
+    [1374319325]=true, [747786398]=true,  [2019181129]=true, [813030262]=true,
+    [3470393585]=true, [157988703]=true,  [372528624]=true,  [253314184]=true,
+    [1588394942]=true, [584370127]=true,  [1434724277]=true, [7838120811]=true,
+    [8593140875]=true, [1193091081]=true, [1004214871]=true, [486251892]=true,
+    [1658186816]=true, [1058831985]=true, [3968854760]=true, [4553863490]=true,
+    [7278178099]=true,
+}
 
 local AmbienceSection = MiscTab:Section({Name="Ambience", Side=1})
 AmbienceSection:Toggle({Name="Enabled",           Flag="Amb_Enabled",    Default=false, Callback=function(v) SETTINGS.Ambience.Enabled=v end})
@@ -854,6 +884,28 @@ GunVFXSec:Label("Arms Color","Left"):Colorpicker({Name="Arms Color",Flag="GunVFX
 GunVFXSec:Dropdown({Name="Arms Material",Flag="GunVFX_ArmsMaterial",Default="ForceField",Items={"ForceField","Neon","Glass","Ice","Wood","Plastic","Metal"},Callback=function(v) SETTINGS.GunVFX.ArmsMaterial=v end})
 GunVFXSec:Dropdown({Name="Arms Texture", Flag="GunVFX_ArmsTexture", Default="None",Items={"Web","Swirl","Checkers","CandyCane","Dots","Scanning","Bubbles","Player FF Texture","Shield Forcefield","Water","America","Rainbow","Akatsuki","None"},Callback=function(v) SETTINGS.GunVFX.ArmsTexture=v end})
 
+local ModDetectorSec = MiscTab:Section({Name="Mod Detector", Side=2})
+ModDetectorSec:Toggle({Name="Mod List",    Flag="MD_Enabled", Default=false, Callback=function(v) SETTINGS.ModDetector.Enabled=v end})
+ModDetectorSec:Toggle({Name="Notify",      Flag="MD_Notify",  Default=true,  Callback=function(v) SETTINGS.ModDetector.Notify=v end})
+
+-- ==== CROSSHAIR UI ====
+local CrosshairSec = MiscTab:Section({Name="Crosshair", Side=2})
+CrosshairSec:Toggle({Name="Enabled", Flag="CH_Enabled", Default=false, Callback=function(v) SETTINGS.Crosshair.Enabled=v end})
+CrosshairSec:Dropdown({Name="Preset", Flag="CH_Preset", Items={"Custom", "Dot", "Cross", "Star of David", "Hexagram", "Circle"}, Default="Custom", Callback=function(v) SETTINGS.Crosshair.Preset=v end})
+CrosshairSec:Label("Color","Left"):Colorpicker({Name="Crosshair Color", Flag="CH_Color", Default=Color3.fromRGB(255,255,255), Callback=function(v) SETTINGS.Crosshair.Color=v end})
+CrosshairSec:Dropdown({Name="Position", Flag="CH_Position", Items={"Center","Mouse","Target"}, Default="Center", Callback=function(v) SETTINGS.Crosshair.Position=v end})
+CrosshairSec:Slider({Name="Sides (Custom)",   Flag="CH_Sides",   Min=2, Default=4,  Max=8,  Decimals=1, Step=1, Callback=function(v) SETTINGS.Crosshair.Sides=v end})
+CrosshairSec:Slider({Name="Length (Custom)",  Flag="CH_Length",  Min=1, Default=10, Max=30, Decimals=1, Step=1, Callback=function(v) SETTINGS.Crosshair.Length=v end})
+CrosshairSec:Slider({Name="Width (Custom)",   Flag="CH_Width",   Min=1, Default=2,  Max=6,  Decimals=1, Step=1, Callback=function(v) SETTINGS.Crosshair.Width=v end})
+CrosshairSec:Slider({Name="Gap (Custom)",     Flag="CH_Gap",     Min=0, Default=6,  Max=20, Decimals=1, Step=1, Callback=function(v) SETTINGS.Crosshair.Gap=v end})
+CrosshairSec:Slider({Name="Transparency", Flag="CH_Transparency", Min=0, Default=0, Max=100, Suffix="%", Decimals=1, Step=1, Callback=function(v) SETTINGS.Crosshair.Transparency=v/100 end})
+CrosshairSec:Toggle({Name="Outline", Flag="CH_Outline", Default=true, Callback=function(v) SETTINGS.Crosshair.Outline=v end})
+CrosshairSec:Label("Outline Color","Left"):Colorpicker({Name="Outline Color", Flag="CH_OutlineColor", Default=Color3.fromRGB(0,0,0), Callback=function(v) SETTINGS.Crosshair.OutlineColor=v end})
+CrosshairSec:Toggle({Name="Spin",    Flag="CH_Spin",    Default=false, Callback=function(v) SETTINGS.Crosshair.Spin=v end})
+CrosshairSec:Slider({Name="Spin Speed", Flag="CH_SpinSpeed", Min=0, Default=1, Max=10, Decimals=1, Step=1, Callback=function(v) SETTINGS.Crosshair.SpinSpeed=v end})
+CrosshairSec:Label("Target Color","Left"):Colorpicker({Name="Target Color", Flag="CH_TargetColor", Default=Color3.fromRGB(255,80,80), Callback=function(v) SETTINGS.Crosshair.TargetColor=v end})
+-- ==== /CROSSHAIR UI ====
+
 local ThemesSection = SettingsTab:Section({Name="Themes", Side=1})
 pcall(function()
     for Index, Value in Library.Theme do
@@ -886,6 +938,174 @@ do
 end
 
 local Flags = Library.Flags
+
+do
+    local MDGui = CreateUndetectedGui("ModDetector")
+    local MDFrame = Instance.new("Frame")
+    MDFrame.AnchorPoint = Vector2.new(1, 1)
+    MDFrame.Position = UDim2.new(1, -15, 1, -15)
+    MDFrame.Size = UDim2.fromOffset(200, 0)
+    MDFrame.AutomaticSize = Enum.AutomaticSize.Y
+    MDFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    MDFrame.BackgroundTransparency = 0.05
+    MDFrame.BorderSizePixel = 0
+    MDFrame.Visible = false
+    MDFrame.Parent = MDGui
+    Instance.new("UICorner", MDFrame).CornerRadius = UDim.new(0, 4)
+    local mdStroke = Instance.new("UIStroke", MDFrame)
+    mdStroke.Color = Color3.fromRGB(50, 220, 110)
+    mdStroke.Thickness = 1.5
+    mdStroke.Transparency = 0
+    local mdPad = Instance.new("UIPadding", MDFrame)
+    mdPad.PaddingTop = UDim.new(0, 6); mdPad.PaddingBottom = UDim.new(0, 6)
+    mdPad.PaddingLeft = UDim.new(0, 8); mdPad.PaddingRight = UDim.new(0, 8)
+    local mdLayout = Instance.new("UIListLayout", MDFrame)
+    mdLayout.Padding = UDim.new(0, 3)
+    mdLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local mdHeader = Instance.new("TextLabel", MDFrame)
+    mdHeader.BackgroundTransparency = 1
+    mdHeader.Size = UDim2.new(1, 0, 0, 16)
+    mdHeader.FontFace = Library.Font
+    mdHeader.TextSize = 12
+    mdHeader.TextColor3 = Color3.fromRGB(50, 220, 110)
+    mdHeader.Text = "MODS (0)"
+    mdHeader.TextXAlignment = Enum.TextXAlignment.Left
+    mdHeader.LayoutOrder = 1
+    mdHeader.Active = true
+
+    local mdHint = Instance.new("TextLabel", MDFrame)
+    mdHint.BackgroundTransparency = 1
+    mdHint.Size = UDim2.new(1, 0, 0, 10)
+    mdHint.FontFace = Library.Font
+    mdHint.TextSize = 9
+    mdHint.TextColor3 = Color3.fromRGB(150, 215, 170)
+    mdHint.Text = "no mods detected"
+    mdHint.TextXAlignment = Enum.TextXAlignment.Left
+    mdHint.LayoutOrder = 9999
+
+    MakeDraggable(MDFrame, mdHeader, MDGui)
+
+    local mdRows = {}
+
+    local function mdRefresh()
+        local count = 0
+        for _, r in pairs(mdRows) do
+            if r.frame and r.frame.Parent then count += 1 end
+        end
+        mdHeader.Text = "MODS (" .. count .. ")"
+        mdHint.Text = count > 0 and "click to copy profile" or "no mods detected"
+        MDFrame.Visible = SETTINGS.ModDetector.Enabled
+    end
+
+    local function mdAdd(player)
+        if mdRows[player.UserId] then return end
+        local row = Instance.new("TextButton")
+        row.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        row.BorderSizePixel = 0
+        row.Size = UDim2.new(1, 0, 0, 18)
+        row.AutoButtonColor = false
+        row.Text = ""
+        row.LayoutOrder = 10
+        row.Parent = MDFrame
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 2)
+        local rStroke = Instance.new("UIStroke", row)
+        rStroke.Color = Color3.fromRGB(35, 90, 55)
+        rStroke.Thickness = 1
+        rStroke.Transparency = 0.2
+
+        local lbl = Instance.new("TextLabel", row)
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, -6, 1, 0)
+        lbl.Position = UDim2.fromOffset(3, 0)
+        lbl.FontFace = Library.Font
+        lbl.TextSize = 10
+        lbl.TextColor3 = Color3.fromRGB(235, 255, 240)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.Text = player.DisplayName
+
+        row.MouseEnter:Connect(function() rStroke.Color = Color3.fromRGB(50, 220, 110) end)
+        row.MouseLeave:Connect(function() rStroke.Color = Color3.fromRGB(35, 90, 55) end)
+        row.MouseButton1Click:Connect(function()
+            pcall(function()
+                setclipboard("https://www.roblox.com/users/" .. player.UserId .. "/profile")
+            end)
+        end)
+
+        mdRows[player.UserId] = {frame = row, player = player}
+    end
+
+    local function mdRemove(userId)
+        local r = mdRows[userId]
+        if r and r.frame then r.frame:Destroy() end
+        mdRows[userId] = nil
+    end
+
+    local function mdSync()
+        if not SETTINGS.ModDetector.Enabled then
+            local toRemove = {}
+            for userId in pairs(mdRows) do toRemove[#toRemove+1] = userId end
+            for _, userId in ipairs(toRemove) do mdRemove(userId) end
+            mdRefresh()
+            return
+        end
+        local current = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if MOD_IDS[p.UserId] then
+                current[p.UserId] = true
+                mdAdd(p)
+            end
+        end
+        local toRemove = {}
+        for userId in pairs(mdRows) do
+            if not current[userId] then toRemove[#toRemove+1] = userId end
+        end
+        for _, userId in ipairs(toRemove) do mdRemove(userId) end
+        mdRefresh()
+    end
+
+    local mdNotified = {}
+    local initialCount = 0
+    for _, p in ipairs(Players:GetPlayers()) do
+        if MOD_IDS[p.UserId] then
+            mdNotified[p.UserId] = true
+            initialCount += 1
+        end
+    end
+
+    if initialCount > 0 and SETTINGS.ModDetector.Notify then
+        task.delay(2, function()
+            Library:Notification("MOD DETECTED - " .. initialCount .. " mod(s) already in server", 6, Color3.fromRGB(255, 80, 80))
+        end)
+    end
+
+    mdSync()
+
+    Players.PlayerAdded:Connect(function(p)
+        task.wait(1)
+        if MOD_IDS[p.UserId] and not mdNotified[p.UserId] then
+            mdNotified[p.UserId] = true
+            if SETTINGS.ModDetector.Notify then
+                Library:Notification("MOD DETECTED - " .. p.DisplayName .. " (@" .. p.Name .. ")", 5, Color3.fromRGB(255, 80, 80))
+            end
+        end
+        mdSync()
+    end)
+
+    Players.PlayerRemoving:Connect(function(p)
+        mdNotified[p.UserId] = nil
+        task.wait(0.1)
+        mdSync()
+    end)
+
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            mdSync()
+        end
+    end)
+end
 
 local FlyGui = CreateUndetectedGui("FlyIndicator")
 local FlyLabel = Instance.new("TextLabel")
@@ -922,6 +1142,183 @@ ReloadBarFill.BackgroundColor3=Color3.fromRGB(50,220,110); ReloadBarFill.BorderS
 Instance.new("UICorner",ReloadBarFill).CornerRadius=UDim.new(1,0)
 local ReloadBarGrad=Instance.new("UIGradient",ReloadBarFill)
 ReloadBarGrad.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(50,220,110)),ColorSequenceKeypoint.new(1,Color3.fromRGB(120,255,160))})
+
+-- ====== CROSSHAIR RENDERER ======
+local CrosshairGui = CreateUndetectedGui("Crosshair")
+CrosshairGui.DisplayOrder = 999999
+CrosshairGui.Enabled = false
+
+local CrosshairOutlineLines, CrosshairLines = {}, {}
+for i = 1, 8 do
+    local outline = Instance.new("Frame")
+    outline.AnchorPoint = Vector2.new(0.5, 0.5)
+    outline.BorderSizePixel = 0
+    outline.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    outline.Visible = false
+    outline.ZIndex = 1
+    outline.Parent = CrosshairGui
+    CrosshairOutlineLines[i] = outline
+
+    local line = Instance.new("Frame")
+    line.AnchorPoint = Vector2.new(0.5, 0.5)
+    line.BorderSizePixel = 0
+    line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    line.Visible = false
+    line.ZIndex = 2
+    line.Parent = CrosshairGui
+    CrosshairLines[i] = line
+end
+
+local function GetCrosshairCenter()
+    local mode = SETTINGS.Crosshair.Position or "Center"
+    if mode == "Mouse" then
+        local m = UserInputService:GetMouseLocation()
+        return Vector2.new(m.X, m.Y)
+    elseif mode == "Target" then
+        local T = _G.scorpionTargeting
+        if SETTINGS.SilentAim.Enabled and T and T.TargetPart and T.TargetPart.Parent then
+            local sp = Camera:WorldToViewportPoint(T.TargetPart.Position)
+            if sp.Z > 0 then
+                return Vector2.new(sp.X, sp.Y)
+            end
+        end
+        local vp = Camera.ViewportSize
+        return Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+    else
+        local vp = Camera.ViewportSize
+        return Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+    end
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    if not SETTINGS.Crosshair.Enabled then
+        if CrosshairGui.Enabled then CrosshairGui.Enabled = false end
+        return
+    end
+    if not CrosshairGui.Enabled then CrosshairGui.Enabled = true end
+
+    local spinSpeed = tonumber(SETTINGS.Crosshair.SpinSpeed) or 1
+    if SETTINGS.Crosshair.Spin then
+        SETTINGS.Crosshair.Rotation = ((tonumber(SETTINGS.Crosshair.Rotation) or 0) + spinSpeed * dt * 60) % 360
+    else
+        SETTINGS.Crosshair.Rotation = 0
+    end
+
+    local center = GetCrosshairCenter()
+
+    local hasTarget = false
+    if SETTINGS.Crosshair.Position == "Target" then
+        local T = _G.scorpionTargeting
+        if T and T.TargetPart and T.TargetPart.Parent then hasTarget = true end
+    end
+
+    local preset = SETTINGS.Crosshair.Preset or "Custom"
+    
+    local baseColor = SETTINGS.Crosshair.Color or Color3.fromRGB(255,255,255)
+    local lineColor = (hasTarget and SETTINGS.Crosshair.TargetColor) or baseColor
+    local transp = tonumber(SETTINGS.Crosshair.Transparency) or 0
+
+    local sides  = math.clamp(math.floor(tonumber(SETTINGS.Crosshair.Sides) or 4), 1, 8)
+    local len    = math.max(tonumber(SETTINGS.Crosshair.Length) or 10, 1)
+    local wid    = math.max(tonumber(SETTINGS.Crosshair.Width)  or 2,  1)
+    local gap    = math.max(tonumber(SETTINGS.Crosshair.Gap)    or 6,  0)
+    local spin   = tonumber(SETTINGS.Crosshair.Rotation) or 0
+
+    if preset == "Star of David" then
+        local R = len + gap
+        local thick = wid
+        local points = {
+            {x = 0, y = -R}, {x = R * 0.866, y = R * 0.5}, {x = -R * 0.866, y = R * 0.5},
+            {x = 0, y = R}, {x = -R * 0.866, y = -R * 0.5}, {x = R * 0.866, y = -R * 0.5}
+        }
+        local segments = {{1,2}, {2,3}, {3,1}, {4,5}, {5,6}, {6,4}}
+        for i = 1, 6 do
+            local line = CrosshairLines[i]
+            local outline = CrosshairOutlineLines[i]
+            local s = segments[i]
+            local p1, p2 = points[s[1]], points[s[2]]
+            local dx, dy = p2.x - p1.x, p2.y - p1.y
+            local dist = math.sqrt(dx * dx + dy * dy)
+            local angle = math.deg(math.atan2(dy, dx))
+            local cx, cy = (p1.x + p2.x) / 2, (p1.y + p2.y) / 2
+            line.Size = UDim2.fromOffset(dist, thick)
+            line.Position = UDim2.fromOffset(center.X + cx, center.Y + cy)
+            line.Rotation = angle + spin
+            line.BackgroundColor3 = lineColor
+            line.BackgroundTransparency = transp
+            line.Visible = true
+            if SETTINGS.Crosshair.Outline then
+                outline.Size = UDim2.fromOffset(dist + 2, thick + 2)
+                outline.Position = UDim2.fromOffset(center.X + cx, center.Y + cy)
+                outline.Rotation = angle + spin
+                outline.BackgroundColor3 = SETTINGS.Crosshair.OutlineColor or Color3.fromRGB(0,0,0)
+                outline.BackgroundTransparency = transp
+                outline.Visible = true
+            else
+                outline.Visible = false
+            end
+        end
+        for i = 7, 8 do
+            CrosshairLines[i].Visible = false
+            CrosshairOutlineLines[i].Visible = false
+        end
+        return
+    end
+
+    if preset == "Dot" then
+        sides = 1
+        len = 3
+        wid = 3
+        gap = 0
+    elseif preset == "Cross" then
+        sides = 4
+        len = 8
+        wid = 2
+        gap = 4
+    elseif preset == "Hexagram" then
+        sides = 6
+        len = 12
+        wid = 1
+        gap = 0
+    elseif preset == "Circle" then
+        sides = 8
+        len = 4
+        wid = 2
+        gap = 12
+    end
+
+    for i = 1, 8 do
+        local line    = CrosshairLines[i]
+        local outline = CrosshairOutlineLines[i]
+        if i <= sides then
+            local angleDeg = -90 + ((i - 1) * (360 / sides)) + spin
+            local rad  = math.rad(angleDeg)
+            local dir  = Vector2.new(math.cos(rad), math.sin(rad))
+            local dist = gap + len * 0.5
+            local pos  = UDim2.fromOffset(center.X + dir.X * dist, center.Y + dir.Y * dist)
+            line.Size = UDim2.fromOffset(len, wid)
+            line.Position = pos
+            line.Rotation = angleDeg
+            line.BackgroundColor3 = lineColor
+            line.BackgroundTransparency = transp
+            line.Visible = true
+            if SETTINGS.Crosshair.Outline then
+                outline.Size = UDim2.fromOffset(len + 2, wid + 2)
+                outline.Position = pos
+                outline.Rotation = angleDeg
+                outline.BackgroundColor3 = SETTINGS.Crosshair.OutlineColor or Color3.fromRGB(0,0,0)
+                outline.BackgroundTransparency = transp
+                outline.Visible = true
+            else
+                outline.Visible = false
+            end
+        else
+            line.Visible = false
+            outline.Visible = false
+        end
+    end
+end)
+-- ====== /CROSSHAIR RENDERER ======
 
 local function StartReloadBar(duration)
     if not SETTINGS.ReloadBar then return end
@@ -1079,22 +1476,26 @@ do
 end
 
 do
-    local __S=getgenv().__SCORP
-    local oldabs=(__S and (__S.hooks.abs or __S.real.abs)) or math.abs
-    __S.hooks.abs=function(x)
-        if SETTINGS.NoBob.Enabled and _dbg.tb():find('ViewmodelController') then
-            for level=2,4 do
-                if _ilv and _ilv(level) then
-                    local stack=_gs2 and _gs2(level)
-                    local v=stack and stack[2]
-                    if type(v)=='boolean' then
-                        if _ss2 then _ss2(level,2,true) end
+    local oldabs=math.abs
+    local ok=pcall(function()
+        if _sr then _sr(math,false) end
+        math.abs=function(x)
+            if SETTINGS.NoBob.Enabled and _dbg.tb():find('ViewmodelController') then
+                for level=2,4 do
+                    if _ilv and _ilv(level) then
+                        local stack=_gs2 and _gs2(level)
+                        local v=stack and stack[2]
+                        if type(v)=='boolean' then
+                            if _ss2 then _ss2(level,2,true) end
+                        end
                     end
                 end
             end
+            return oldabs(x)
         end
-        return oldabs(x)
-    end
+        if _sr then _sr(math,true) end
+    end)
+    if not ok then warn("[scorpion.wtf] NoBob: setreadonly unavailable") end
 end
 
 do
@@ -1190,9 +1591,8 @@ do
         local ItemClass=Modules:FindFirstChild('ItemClass')
         if ItemClass then
             ItemClass=require(ItemClass)
-            local __S=getgenv().__SCORP
-            local oldAS=(__S and (__S.hooks.AttachmentStats or __S.real.AttachmentStats)) or ItemClass.AttachmentStats
-            __S.hooks.AttachmentStats=function(v50,v51)
+            local oldAS=ItemClass.AttachmentStats
+            ItemClass.AttachmentStats=function(v50,v51)
                 local tb
                 local okTb=pcall(function() tb = debug.traceback() end)
                 if not okTb or type(tb) ~= "string" then tb = "" end
@@ -1210,6 +1610,101 @@ do
     end
 end
 
+-- ================== FAST MELEE + INSTANT EQUIP HOOK (START) ==================
+do
+    local Modules = ReplicatedStorage:FindFirstChild('Modules') or ReplicatedStorage:WaitForChild('Modules', 10)
+    if not Modules then return end
+    local ToolInfoModule = Modules:FindFirstChild('ToolInfo')
+    if not ToolInfoModule then return end
+    local ok, ToolInfoTbl = pcall(require, ToolInfoModule)
+    if not ok or type(ToolInfoTbl) ~= 'table' then return end
+
+    local function DeepClone(t)
+        if type(t) ~= 'table' then return t end
+        local c = {}
+        for k, v in pairs(t) do c[k] = DeepClone(v) end
+        return c
+    end
+
+    local Wrapped = DeepClone(ToolInfoTbl)
+    for _, item in pairs(Wrapped) do
+        if type(item) ~= 'table' then continue end
+
+        if type(item.Weapon) == 'table' then
+            local rawW = item.Weapon
+            local hasMelee = type(item.Melee) == 'table'
+            item.Weapon = setmetatable({}, {
+                __metatable = "",
+                __index = function(_, k)
+                    local v = rawW[k]
+                    if hasMelee and k == 'Cooldown' and SETTINGS.MeleeSpeed.Enabled and type(v) == 'number' then
+                        return v / SETTINGS.MeleeSpeed.Amount
+                    end
+                    if k == 'EquipAnimSpeed' and SETTINGS.InstantEquip.Enabled then
+                        return math.huge
+                    end
+                    return v
+                end,
+            })
+        end
+
+        if type(item.Melee) == 'table' and type(item.Melee.MeleeChecks) == 'table' then
+            for _, check in pairs(item.Melee.MeleeChecks) do
+                if type(check) == 'table' and type(check[2]) == 'table' then
+                    local inner = check[2]
+                    for k, v in pairs(inner) do
+                        if type(v) == 'table' then
+                            local rawV = v
+                            inner[k] = setmetatable({}, {
+                                __metatable = "",
+                                __index = function(_, key)
+                                    local rv = rawV[key]
+                                    if key == 'Range' and SETTINGS.MeleeRange.Enabled and type(rv) == 'number' then
+                                        return rv * SETTINGS.MeleeRange.Amount
+                                    end
+                                    return rv
+                                end,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local SetUpvalue = debug.setupvalue
+    local function PatchFunc(func)
+        if type(func) ~= 'function' or not SetUpvalue then return end
+        local okU, ups = pcall(_dbg.gup, func)
+        if not okU or type(ups) ~= 'table' then return end
+        for i, up in pairs(ups) do
+            if up == ToolInfoTbl then
+                pcall(SetUpvalue, func, i, Wrapped)
+            end
+        end
+    end
+
+    local function PatchAll()
+        local gcOK, gc = pcall(getgc)
+        if not gcOK or type(gc) ~= 'table' then return end
+        for _, fn in pairs(gc) do
+            if type(fn) == 'function' then
+                local info = _dbg.info(fn, 's')
+                if type(info) == 'string' and info:find('ViewmodelController', 1, true) then
+                    PatchFunc(fn)
+                end
+            end
+        end
+    end
+
+    PatchAll()
+    Client.CharacterAdded:Connect(function()
+        task.wait(1)
+        PatchAll()
+    end)
+end
+-- ================== FAST MELEE + INSTANT EQUIP HOOK (END) ==================
+
 do
     if not _hook then return end
     local Modules=ReplicatedStorage:WaitForChild('Modules',10)
@@ -1218,9 +1713,8 @@ do
     if not RaycastModule then return end
     local ok, RaycastUtil = pcall(require, RaycastModule)
     if not ok or not RaycastUtil or type(RaycastUtil.Raycast) ~= "function" then return end
-    local __S=getgenv().__SCORP
-    local OriginalRaycast=(__S and (__S.hooks.Raycast or __S.real.Raycast)) or RaycastUtil.Raycast
-    __S.hooks.Raycast = function(...)
+    local OriginalRaycast
+    OriginalRaycast = _hook(RaycastUtil.Raycast, function(...)
         local tb
         local okTb=pcall(function() tb=debug.traceback() end)
         if not okTb or type(tb)~="string" then tb="" end
@@ -1246,7 +1740,7 @@ do
             return unpack(Output)
         end
         return OriginalRaycast(...)
-    end
+    end)
 end
 
 do
@@ -1846,6 +2340,7 @@ local VALID_NODE_FLAGS={Stone=true,Metal=true,Phosphate=true}
 local BASE_FLAG_MAP={
     ["Care Package"]="Care Package",CarePackage="Care Package",Care_Package="Care Package",
     ["Body Bag"]="Body Bag",BodyBag="Body Bag",Body_Bag="Body Bag",
+    Corpse="Body Bag",
     ["Salvaged Flycopter"]="Salvaged Flycopter",SalvagedFlycopter="Salvaged Flycopter",Salvaged_Flycopter="Salvaged Flycopter",Flycopter="Salvaged Flycopter",
     ["Auto Turret"]="Auto Turret",AutoTurret="Auto Turret",Auto_Turret="Auto Turret",
     ["Shotgun Turret"]="Shotgun Turret",ShotgunTurret="Shotgun Turret",Shotgun_Turret="Shotgun Turret",
@@ -1865,6 +2360,8 @@ end
 local function getBaseFlag(obj)
     if not obj or not obj.Name then return nil end
     if BASE_FLAG_MAP[obj.Name] then return BASE_FLAG_MAP[obj.Name] end
+    -- detect "name's body" corpse pieces (Dead Rails renamed Body Bag to Corpse)
+    if obj.Name:match("'s [Bb]ody$") then return "Body Bag" end
     local key=normalizeName(obj.Name); if BASE_FLAG_MAP_LOWER[key] then return BASE_FLAG_MAP_LOWER[key] end
     if VALID_BASE_FLAGS[obj.Name] then return obj.Name end; return nil
 end
@@ -1875,9 +2372,15 @@ local function espify(obj,staticname,manualflag)
     label.FontFace=Library.Font; label.TextColor3=Color3.new(1,1,1); label.AnchorPoint=Vector2.new(0.5,0.5)
     label.AutomaticSize=Enum.AutomaticSize.XY; label.Size=UDim2.fromOffset(0,0); label.Visible=false; label.Parent=ScreenGui
     local stroke=Instance.new('UIStroke'); stroke.Thickness=1; stroke.Color=Color3.new(0,0,0); stroke.Parent=label
-    miscCache[obj]={obj=obj,label=label,stroke=stroke,flag=flag,staticname=staticname}
+    local imageIcon = Instance.new('ImageLabel')
+    imageIcon.BackgroundTransparency = 1
+    imageIcon.Size = UDim2.fromOffset(32, 32)
+    imageIcon.AnchorPoint = Vector2.new(0.5, 1)
+    imageIcon.Visible = false
+    imageIcon.Parent = ScreenGui
+    miscCache[obj]={obj=obj,label=label,stroke=stroke,flag=flag,staticname=staticname,image=imageIcon}
 end
-local function removeEsp(obj) local data=miscCache[obj]; if data then data.label:Destroy(); miscCache[obj]=nil end end
+local function removeEsp(obj) local data=miscCache[obj]; if data then data.label:Destroy(); if data.image then data.image:Destroy() end; miscCache[obj]=nil end end
 local function handleNode(node)
     if not node or miscCache[node] then return end
     if not node:IsA("Model") and not node:IsA("BasePart") then return end
@@ -1885,7 +2388,8 @@ local function handleNode(node)
     local displayName=flag; if flag=="Metal" then displayName="Iron" end; espify(node,displayName,flag)
 end
 local function handleBaseObject(obj)
-    if not obj or miscCache[obj] then return end; if not obj:IsA("Model") then return end
+    if not obj or miscCache[obj] then return end
+    if not obj:IsA("Model") and not obj:IsA("BasePart") then return end
     local flag=getBaseFlag(obj); if not flag then return end; espify(obj,flag,flag)
 end
 if NodesFolder then
@@ -1903,7 +2407,7 @@ local Bases=Workspace:FindFirstChild("Bases")
 if Bases then
     for _, obj in pairs(Bases:GetDescendants()) do handleBaseObject(obj) end
     Bases.DescendantAdded:Connect(function(obj) task.wait(0.3); handleBaseObject(obj) end)
-    Bases.DescendantRemoving:Connect(function(obj) if obj:IsA("Model") then removeEsp(obj) end end)
+    Bases.DescendantRemoving:Connect(function(obj) if obj:IsA("Model") or obj:IsA("BasePart") then removeEsp(obj) end end)
 end
 if Drops and Plants then
     RunService.RenderStepped:Connect(function()
@@ -1941,20 +2445,43 @@ RunService.RenderStepped:Connect(function()
     local now=tick(); if now-lastTick<1/60 then return end; lastTick=now
     local miscEnabled=Flags.MiscEnabledESP; local camPos=Camera.CFrame.Position
     for obj,data in pairs(miscCache) do
-        if not obj or not obj.Parent then data.label:Destroy(); miscCache[obj]=nil; continue end
-        if not miscEnabled then data.label.Visible=false; continue end
+        if not obj or not obj.Parent then data.label:Destroy(); if data.image then data.image:Destroy() end; miscCache[obj]=nil; continue end
+        if not miscEnabled then data.label.Visible=false; if data.image then data.image.Visible=false end; continue end
         local toggleFlag=data.flag; local flagObj=Flags[toggleFlag..'Enabled']
-        if flagObj==nil or flagObj==false then data.label.Visible=false; continue end
+        if flagObj==nil or flagObj==false then data.label.Visible=false; if data.image then data.image.Visible=false end; continue end
         local worldPos
         if obj:IsA('BasePart') then worldPos=obj.Position
-        else local ok,pivot=pcall(function() return obj:GetPivot().Position end); if not ok then data.label.Visible=false; continue end; worldPos=pivot end
+        else local ok,pivot=pcall(function() return obj:GetPivot().Position end); if not ok then data.label.Visible=false; if data.image then data.image.Visible=false end; continue end; worldPos=pivot end
         local screenPos,_,onScreen=Project(worldPos)
-        if not onScreen or not screenPos then data.label.Visible=false; continue end
+        if not onScreen or not screenPos then data.label.Visible=false; if data.image then data.image.Visible=false end; continue end
         local dist=(camPos-worldPos).Magnitude
-        if dist>(SETTINGS[data.flag.."MaxDist"] or 400) then data.label.Visible=false; continue end
+        if dist>(SETTINGS[data.flag.."MaxDist"] or 400) then data.label.Visible=false; if data.image then data.image.Visible=false end; continue end
+        local displayName = data.staticname or data.flag
+        local distText = string.format('%.1f Studs', dist)
+        local finalText = ""
+        if SETTINGS.MiscESPShowName and SETTINGS.MiscESPShowStuds then
+            finalText = displayName .. "\n" .. distText
+        elseif SETTINGS.MiscESPShowName then
+            finalText = displayName
+        elseif SETTINGS.MiscESPShowStuds then
+            finalText = distText
+        end
         data.label.Visible=true; data.label.Position=UDim2.fromOffset(screenPos.X,screenPos.Y)
-        data.label.Text=string.format('%s\n%.1f Studs',data.staticname or data.flag,dist)
+        data.label.Text=finalText
         local col=Flags[data.flag..'Color']; if col then data.label.TextColor3=col.Color end
+        if SETTINGS.MiscESPShowImages and data.image then
+            local iconUrl = SETTINGS.WeaponIcons[obj.Name] or SETTINGS.WeaponIcons[data.staticname] or ""
+            if iconUrl ~= "" then
+                data.image.Image = iconUrl
+                data.image.ImageColor3 = col and col.Color or Color3.fromRGB(255,255,255)
+                data.image.Position = UDim2.fromOffset(screenPos.X, screenPos.Y - 10)
+                data.image.Visible = true
+            else
+                data.image.Visible = false
+            end
+        elseif data.image then
+            data.image.Visible = false
+        end
     end
 end)
 
@@ -2210,15 +2737,14 @@ do
     _G.scorpionTargeting=Targeting
 
     local ShouldHit=false
-    local __S=getgenv().__SCORP
-    local OriginalCreateProjectile=(__S and (__S.hooks.CreateProjectile or __S.real.CreateProjectile)) or VFXModule.CreateProjectile
-    __S.hooks.CreateProjectile=function(self,...)
+    local OriginalCreateProjectile=VFXModule.CreateProjectile
+    VFXModule.CreateProjectile=function(self,...)
         local Args={...}
         local Traceback=_dbg.tb()
         if Traceback:find("ViewmodelController") and Args[1].StepFunction~="FakeStepFunc" and Args[1].HitFunction~="FakeHitFunc" and not tostring(Args[1].HitFunction):find("Ignore") then
             if SETTINGS.ShootSound.Enabled then PlayShootsound("Minecraft Bow") end
             ShouldHit=((math.floor(RandomGen:NextNumber(0,1)*100)/100)<=(SETTINGS.SilentAim.HitChance/100))
-            local stacklevel=(_ilv and _ilv(3)) and 3 or ((_ilv and _ilv(2)) and 2 or nil)
+            local stacklevel=(_ilv and _ilv(4)) and 4 or ((_ilv and _ilv(3)) and 3 or nil)
             if stacklevel and Targeting.TargetPart and ClientCharacter then
                 local targetPos=Targeting.TargetPart.Position
                 local gun=GetGun(ClientCharacter); local oldspeed=Args[1].Speed or 500
@@ -2623,9 +3149,8 @@ do
         return false
     end
     local lastShotTime,lastShotPos,lastShotDir=0,Vector3.zero,Vector3.zero
-    local __S=getgenv().__SCORP
-    local OrigCP=(__S and (__S.hooks.CreateProjectile or __S.real.CreateProjectile)) or VFX.CreateProjectile
-    __S.hooks.CreateProjectile=function(self,...)
+    local OrigCP=VFX.CreateProjectile
+    VFX.CreateProjectile=function(self,...)
         local Args={...}; local tb=_dbg.tb()
         if tb:find('ViewmodelController') and Args[1] then
             local origin=Args[1].Position or Args[1].PositionFirst; local dir=Args[1].Direction or Args[1].DirectionFirst
@@ -2649,15 +3174,14 @@ do
         local toHit=position-lastShotPos; if toHit.Magnitude<1 then return true end
         return toHit.Unit:Dot(lastShotDir)>=AIM_TOLERANCE
     end
-    local __S=getgenv().__SCORP
-    local OrigBlood=(__S and (__S.hooks.CreateBlood or __S.real.CreateBlood)) or VFX.CreateBlood
-    __S.hooks.CreateBlood=function(self,hit,position)
+    local OrigBlood=VFX.CreateBlood
+    VFX.CreateBlood=function(self,hit,position)
         local tb=_dbg.tb()
         if not tb:find("function HitVFX") then if isCharacterHit(hit) and isMyHit(position) then hitsoundBind:Fire() end end
         return OrigBlood(self,hit,position)
     end
-    local OrigHole=(__S and (__S.hooks.CreateHole or __S.real.CreateHole)) or VFX.CreateHole
-    __S.hooks.CreateHole=function(self,hit,position,normal,material,item,impactOnly)
+    local OrigHole=VFX.CreateHole
+    VFX.CreateHole=function(self,hit,position,normal,material,item,impactOnly)
         local tb=_dbg.tb()
         if not tb:find("function HitVFX") then if isCharacterHit(hit) and isMyHit(position) then hitsoundBind:Fire() end end
         return OrigHole(self,hit,position,normal,material,item,impactOnly)
