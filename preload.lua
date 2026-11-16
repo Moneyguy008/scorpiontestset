@@ -1,18 +1,22 @@
 -- preload.lua  (Scorpion UD preload — amongus-style script-hold)
 --
--- Runs on teleport INTO Fallen Survival, queued by main.lua via queue_on_teleport so it
--- executes before the game's own scripts. It:
---   1. HOLDS every game LocalScript/Script disabled (freezes the game, incl. the AC
---      bootstrap ReplicatedFirst.Preload — so AssetContainer has NOT run yet).
---   2. Installs Scorpion's trampolines on the AC-watched module functions while frozen,
---      so when AssetContainer finally runs it captures our trampolines AS the baseline
---      and its self-probe (islclosure/checkcaller/getrawmetatable) finds no tamper diff.
---   3. RELEASES the scripts; the game boots on top of the already-installed trampolines.
---   4. Loads the (patched) Scorpion, which only writes handler closures into the
---      __SCORP.hooks slots — plain table writes the AC does not watch.
+-- WHAT CHANGED AND WHY (this is the fix):
+--   The previous version did  Hold -> Trampolines -> RELEASE -> fetch+loadstring Scorpion.
+--   That put the ENTIRE obfuscated payload -- the network fetch, the compile, and the VM
+--   unpack -- OUTSIDE the quiet window, with AssetContainer already booted and sampling.
+--   Fallen's AC samples memory over time (FN 207 = gcinfo + table.create/insert/clear),
+--   so a VM unpacking megabytes mid-session is exactly the spike it is built to notice.
 --
--- NOTE: this is client-hook stealth only. It does NOT change server-side shot validation;
--- if the server independently re-checks combat geometry, silent aim can still flag.
+--   amongus does the opposite:  hold() -> request() -> loadstring() -> payload(release).
+--   Nothing expensive ever happens while the anti-cheat is awake; the payload itself
+--   decides when to release.
+--
+--   So now:  HOLD -> trampolines -> COMPILE the payload (the big allocation) -> collect
+--            -> RELEASE -> run it.
+--   The compile lands inside the frozen window. Execution happens after release because
+--   Scorpion's WaitForChild calls need a running game.
+--
+-- NOTE: client-hook stealth only. Does NOT change server-side shot validation.
 
 local REPO         = "https://raw.githubusercontent.com/Moneyguy008/scorpiontestset/main"
 local SCORPION_URL = REPO .. "/scorpion.lua"
@@ -60,6 +64,18 @@ local function ReleaseScripts()
       table.clear(heldScripts)
 end
 
+-- FAILSAFE: if we are still holding by the time the loading screen exists, something went
+-- wrong and the game is frozen. Release rather than leave the client stuck. (amongus kicks
+-- here instead; releasing is friendlier and equally safe.)
+task.spawn(function()
+      local t0 = os.clock()
+      while not released and os.clock() - t0 < 25 do task.wait(0.5) end
+      if not released then
+            warn("[scorpion-ud] hold exceeded 25s — releasing so the client is not stuck")
+            ReleaseScripts()
+      end
+end)
+
 ---------------------------------------------------------- 2. TRAMPOLINES (pre-AC)
 local SCORP = getgenv().__SCORP or { real = {}, hooks = {} }
 getgenv().__SCORP = SCORP
@@ -105,18 +121,38 @@ end
 ---------------------------------------------------------------- 3. ORCHESTRATE
 HoldScripts()              -- freeze the game (and the AC bootstrap) first
 InstallTrampolines()       -- swap the module functions while nothing is watching
-ReleaseScripts()           -- game boots on top of our trampolines
 
-task.spawn(function()      -- load Scorpion in the normal post-release environment
-      local ok, src = pcall(httpget, SCORPION_URL)
-      if not ok or type(src) ~= "string" then
-            warn("[scorpion-ud] failed to fetch scorpion.lua")
-            return
+-- ===== the payload is fetched and COMPILED here, INSIDE the frozen window =====
+-- SCORP_SRC is embedded by main.lua so there is no network round-trip at teleport.
+-- Falls back to HttpGet if it was not embedded.
+local payloadFn
+do
+      local src = SCORP_SRC
+      if type(src) ~= "string" or #src == 0 then
+            local ok, fetched = pcall(httpget, SCORPION_URL)
+            if ok and type(fetched) == "string" then src = fetched end
       end
-      local fn, err = loadstring(src)
-      if type(fn) ~= "function" then
-            warn("[scorpion-ud] scorpion.lua syntax error: " .. tostring(err))
-            return
+
+      if type(src) == "string" and #src > 0 then
+            local fn, err = loadstring(src, "=Animate")   -- innocuous chunkname
+            if type(fn) == "function" then
+                  payloadFn = fn
+            else
+                  warn("[scorpion-ud] payload syntax error: " .. tostring(err))
+            end
+      else
+            warn("[scorpion-ud] could not obtain the payload source")
       end
-      fn()                 -- fills __SCORP.hooks; trampolines route to them
+
+      -- collapse the transient garbage from compiling before anything starts watching
+      pcall(function() collectgarbage("collect") end)
+end
+
+ReleaseScripts()           -- only NOW does the game (and the AC) boot
+
+task.spawn(function()
+      if not payloadFn then return end
+      task.wait(0.5)       -- let the game come up; Scorpion's WaitForChilds need it
+      local ok, err = pcall(payloadFn)
+      if not ok then warn("[scorpion-ud] payload runtime error: " .. tostring(err)) end
 end)
