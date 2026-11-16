@@ -1,14 +1,18 @@
 -- main.lua  (Scorpion UD loader — run this from the LOBBY)
 --
--- Fetches preload.lua and queue_on_teleport's it so it runs the instant you teleport into
--- a Fallen Survival server — BEFORE the game's scripts (and anti-cheat) execute. The full
--- preload source is embedded into the queued string so there is no network delay on
--- teleport (the script-hold must happen immediately, before any game script runs).
+-- WHAT CHANGED AND WHY:
+--   It now fetches BOTH preload.lua and scorpion.lua here in the LOBBY, and embeds both
+--   into the queued string. That means at teleport there is ZERO network traffic: the
+--   script-hold starts instantly and the payload source is already in hand, so it can be
+--   compiled inside the frozen window instead of after release.
+--
+--   The lobby has no anti-cheat, so doing the network here costs nothing.
 --
 -- Usage: inject / run this while sitting in the Fallen Survival LOBBY, then join a server.
 
-local REPO        = "https://raw.githubusercontent.com/Moneyguy008/scorpiontestset/main"
-local PRELOAD_URL = REPO .. "/preload.lua"
+local REPO         = "https://raw.githubusercontent.com/Moneyguy008/scorpiontestset/main"
+local PRELOAD_URL  = REPO .. "/preload.lua"
+local SCORPION_URL = REPO .. "/scorpion.lua"
 
 local queue = queue_on_teleport
       or queueonteleport
@@ -24,13 +28,30 @@ if type(queue) ~= "function" then
       return
 end
 
-local ok, preloadSrc = pcall(function() return game:HttpGet(PRELOAD_URL) end)
-if not ok or type(preloadSrc) ~= "string" then
-      warn("[scorpion-ud] failed to fetch preload.lua from " .. PRELOAD_URL)
-      return
+local function fetch(url, what)
+      local ok, body = pcall(function() return game:HttpGet(url) end)
+      if not ok or type(body) ~= "string" or #body == 0 then
+            warn(("[scorpion-ud] failed to fetch %s from %s"):format(what, url))
+            return nil
+      end
+      print(("[scorpion-ud] fetched %s (%d bytes)"):format(what, #body))
+      return body
 end
 
--- Embed the full preload so the hold runs with zero network latency on teleport.
-queue(string.format("loadstring(%q)()", preloadSrc))
+local preloadSrc = fetch(PRELOAD_URL, "preload.lua")
+if not preloadSrc then return end
 
-print("[scorpion-ud] queued. Join a Fallen Survival server from the lobby.")
+-- Fetch the payload HERE, in the lobby, so the teleport-side hold needs no network.
+local scorpionSrc = fetch(SCORPION_URL, "scorpion.lua")
+if not scorpionSrc then
+      warn("[scorpion-ud] continuing without an embedded payload — preload will HttpGet it")
+      scorpionSrc = ""
+end
+
+-- Embed BOTH. SCORP_SRC is declared first so preload.lua (same chunk) can see it.
+local queued = string.format("local SCORP_SRC = %q\n%s", scorpionSrc, preloadSrc)
+
+queue(queued)
+
+print(("[scorpion-ud] queued %d bytes (preload %d + payload %d). Press Play.")
+      :format(#queued, #preloadSrc, #scorpionSrc))
